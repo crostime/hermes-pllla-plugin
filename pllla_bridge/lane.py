@@ -184,14 +184,18 @@ class PlllaLane:
 
     # ── outbound ──────────────────────────────────────────────────────────
 
-    async def emit_response(self, task_id: str, content: str, failure: Optional[str] = None) -> None:
+    async def emit_response(
+        self, task_id: str, content: str, failure: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """``failure`` is the server's object shape (``failure.build_failure``) —
+        never a bare string, which the server rejects and the task then times out."""
         payload: Dict[str, Any] = {
             "taskId": task_id,
             "aiUserId": self.state.ai_user.get("id", ""),
             "content": content,
         }
         if failure:
-            payload["failure"] = failure
+            payload["failure"] = dict(failure)
         await self._emit(self.state.socket.response_event, payload)
 
     async def send_chat_message(self, chat_id: str, content: str) -> bool:

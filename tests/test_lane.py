@@ -90,7 +90,9 @@ def test_lane_connects_with_the_contract_and_routes_task_and_greeting():
         await sio.handlers["agent:runtime_ready"]({"greeting": {"shouldSend": True, "chatId": "c9"}})
         await sio.handlers["agent:runtime_ready"]({"greeting": {"shouldSend": False, "chatId": "c9"}})
         await lane.emit_response("t1", "hello")
-        await lane.emit_response("t2", "", failure="boom")
+        await lane.emit_response(
+            "t2", "", failure={"kind": "unknown", "engineType": "hermes", "model": "hermes"}
+        )
         assert await lane.send_chat_message("c9", "hi") is True
         result = await lane.dispatch_tool("t1", "pllla.library.search", {"query": "x"})
         await lane.stop()
@@ -102,7 +104,15 @@ def test_lane_connects_with_the_contract_and_routes_task_and_greeting():
     assert statuses[0] == "connected"
     assert sio.emitted == [
         ("agent:response", {"taskId": "t1", "aiUserId": "u1", "content": "hello"}),
-        ("agent:response", {"taskId": "t2", "aiUserId": "u1", "content": "", "failure": "boom"}),
+        (
+            "agent:response",
+            {
+                "taskId": "t2",
+                "aiUserId": "u1",
+                "content": "",
+                "failure": {"kind": "unknown", "engineType": "hermes", "model": "hermes"},
+            },
+        ),
         ("agent:send_message", {"chatId": "c9", "aiUserId": "u1", "content": "hi"}),
     ]
     assert sio.calls == [("agent:dispatch-tool", {"taskId": "t1", "toolName": "pllla.library.search", "toolInput": {"query": "x"}})]

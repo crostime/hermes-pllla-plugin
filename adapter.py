@@ -31,6 +31,11 @@ from .pllla_bridge.contract import (
     TURN_TIMEOUT_SECONDS,
 )
 from .pllla_bridge.deps import ensure_socketio, socketio_available
+from .pllla_bridge.failure import (
+    build_failure,
+    failure_chat_text,
+    failure_from_gateway_reply,
+)
 from .pllla_bridge.lane import PendingTurn, PlllaLane
 from .pllla_bridge.pairing import (
     PairState,
@@ -357,10 +362,19 @@ class PlllaAdapter(BasePlatformAdapter):  # type: ignore[misc]
                 await asyncio.wait_for(turn.done, timeout=TURN_TIMEOUT_SECONDS)
             except asyncio.TimeoutError:
                 self._lane.pending.remove(chat_id, task_id)
-                await self._lane.emit_response(task_id, "", failure="Hermes did not answer within the turn timeout.")
+                message = "Hermes did not answer within the turn timeout."
+                await self._lane.emit_response(
+                    task_id,
+                    failure_chat_text("timeout", message),
+                    failure=build_failure(message, kind="timeout"),
+                )
             except Exception as error:  # noqa: BLE001 — surfaced honestly
                 self._lane.pending.remove(chat_id, task_id)
-                await self._lane.emit_response(task_id, "", failure=str(error))
+                message = str(error)
+                failure = build_failure(message)
+                await self._lane.emit_response(
+                    task_id, failure_chat_text(failure["kind"], message), failure=failure
+                )
 
     async def _handle_greeting(self, chat_id: str) -> None:
         assert self._lane is not None
@@ -422,7 +436,12 @@ class PlllaAdapter(BasePlatformAdapter):  # type: ignore[misc]
         turn = lane.pending.pop(resolved)
         try:
             if turn is not None and turn.task_id:
-                await lane.emit_response(turn.task_id, content)
+                # A gateway-side error reply ("⚠️ Provider authentication
+                # failed …") stays as the text, with the structured failure
+                # riding along so PLLLA records the kind.
+                await lane.emit_response(
+                    turn.task_id, content, failure=failure_from_gateway_reply(content)
+                )
             else:
                 # First greeting, a home-channel delivery (cron), or a message
                 # Hermes initiated on its own.
