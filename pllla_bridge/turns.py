@@ -18,6 +18,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from .contract import CALL_TOOL_NAME as CALL_TOOL_NAME_FOR_HINT
 from .contract import PLLLA_CALL_NAME, PLLLA_SEARCH_NAME
 from .ranking import search_tools
 
@@ -123,11 +124,23 @@ def _no_active_task() -> str:
     )
 
 
+CALL_HINT = (
+    "Run any match with pllla_tools_call(name=<name>, input={...}). "
+    "These are PLLLA tools, not Hermes deferred tools — Hermes' tool_call "
+    "does not know them (measured: a model wasted 13 calls that way)."
+)
+
+
 async def handle_search(args: Dict[str, Any], **_: Any) -> str:
     task = CURRENT_TASK.get()
     if task is None:
         return _no_active_task()
-    return _result(search_tools(task.tools, args or {}))
+    found = search_tools(task.tools, args or {})
+    result = found.get("result")
+    if isinstance(result, dict):
+        result["call_with"] = CALL_TOOL_NAME_FOR_HINT
+        result["note"] = CALL_HINT
+    return _result(found)
 
 
 async def handle_call(args: Dict[str, Any], **_: Any) -> str:
@@ -172,7 +185,8 @@ SEARCH_TOOL_SCHEMA = {
     "description": (
         "Search the PLLLA app tools granted to the current conversation turn. "
         "Returns tool names, descriptions, and input schemas. Search before "
-        "concluding a PLLLA app capability is unavailable."
+        "concluding a PLLLA app capability is unavailable. Run a match with "
+        "pllla_tools_call — these are not Hermes tool_search/tool_call tools."
     ),
     "parameters": {
         "type": "object",

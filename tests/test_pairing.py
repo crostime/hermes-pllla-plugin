@@ -11,7 +11,16 @@ from pllla_bridge.pairing import (
     parse_pair_response,
     save_state,
     state_file_path,
+    token_fingerprint,
 )
+
+
+def test_token_fingerprint_is_stable_short_and_never_the_token():
+    fp = token_fingerprint("pair_live_abc")
+    assert fp == token_fingerprint(" pair_live_abc ")
+    assert len(fp) == 16 and "pair_live" not in fp
+    assert token_fingerprint("") == ""
+    assert token_fingerprint("pair_live_abd") != fp
 
 from _fixtures import PAIR_RESPONSE
 
@@ -51,6 +60,11 @@ def test_state_round_trips_with_0600_permissions(tmp_path):
     assert loaded.socket.events["task"] == "agent:task"
     assert loaded.identity.name == "Hermes Bot"
     assert loaded.owner_user_id == "owner1"
+    # Additive field: an older state file simply has no fingerprint.
+    assert loaded.pairing_fingerprint == ""
+    state.pairing_fingerprint = "abcd"
+    save_state(path, state)
+    assert load_state(path).pairing_fingerprint == "abcd"
     # 손상된 파일은 "페어링 없음" 으로 본다.
     path.write_text("{not json", encoding="utf-8")
     assert load_state(path) is None

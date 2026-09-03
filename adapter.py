@@ -39,6 +39,7 @@ from .pllla_bridge.pairing import (
     load_state,
     save_state,
     state_file_path,
+    token_fingerprint,
 )
 from .pllla_bridge.persona import install_persona
 from .pllla_bridge.turns import (
@@ -268,28 +269,63 @@ class PlllaAdapter(BasePlatformAdapter):  # type: ignore[misc]
             self._mark_disconnected()
 
     async def _resolve_state(self) -> PairState:
+        """The pairing to run on.
+
+        A saved pairing is reused unless the config carries a token this
+        pairing did not come from — then the new token is consumed and
+        replaces it (a new agent, or a re-issued token after the old key
+        expired). If that new token turns out unusable (already consumed,
+        expired) the saved pairing stays in force and the token is marked
+        seen so the next start does not retry it.
+        """
         if self._state is not None:
             return self._state
         path = state_file_path(self._home)
         saved = load_state(path)
-        if saved is not None:
+        token = _pairing_token(self.config)
+        fingerprint = token_fingerprint(token)
+        if saved is not None and (not fingerprint or saved.pairing_fingerprint == fingerprint):
             self._state = saved
             return saved
-        token = _pairing_token(self.config)
         if not token:
             raise PairingError(
                 "PLLLA is not paired: no saved pairing and no pairingToken in gateway.platforms.pllla.extra"
             )
-        state = await consume_pairing_token(
-            server_origin=_server_origin(self.config),
-            pairing_token=token,
-            runtime_label=RUNTIME_LABEL,
-        )
+        try:
+            state = await self._consume(
+                server_origin=_server_origin(self.config),
+                pairing_token=token,
+                runtime_label=RUNTIME_LABEL,
+                account_id=str(_extra(self.config).get("accountId") or ""),
+            )
+        except PairingError as error:
+            if saved is None:
+                raise
+            logger.warning(
+                "[pllla] the configured pairing token was not accepted (%s) — keeping the saved pairing for %s",
+                error,
+                saved.ai_user.get("username") or saved.account_id or "this agent",
+            )
+            saved.pairing_fingerprint = fingerprint
+            save_state(path, saved)
+            self._state = saved
+            return saved
+        state.pairing_fingerprint = fingerprint
         save_state(path, state)
         # The persona comes with the pairing — Hermes reads SOUL.md as slot 1.
         install_persona(self._home, state.identity)
+        if saved is not None:
+            logger.info(
+                "[pllla] re-paired: %s → %s",
+                saved.ai_user.get("username") or saved.account_id or "?",
+                state.ai_user.get("username") or state.account_id or "?",
+            )
+            self._owner_chat_id = None
         self._state = state
         return state
+
+    # Seam for tests; the module function is the real thing.
+    _consume = staticmethod(consume_pairing_token)
 
     # ── inbound: PLLLA task → Hermes turn ─────────────────────────────────
 

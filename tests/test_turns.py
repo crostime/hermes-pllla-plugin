@@ -69,6 +69,9 @@ def test_tools_refuse_without_an_active_task_and_dispatch_only_granted_names():
         try:
             found = json.loads(await handle_search({"query": "image"}))
             assert [m["name"] for m in found["result"]["matches"]] == ["pllla.chat.send_media"]
+            # The model must not route matches through Hermes' own tool_call.
+            assert found["result"]["call_with"] == "pllla_tools_call"
+            assert "tool_call" in found["result"]["note"]
             denied = json.loads(await handle_call({"name": "pllla.library.search", "input": {}}))
             assert denied["code"] == "PLLLA_TOOL_NOT_GRANTED"
             ok = json.loads(await handle_call({"name": "pllla.chat.send_media", "input": {"path": "/x"}}))

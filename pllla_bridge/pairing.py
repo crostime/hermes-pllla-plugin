@@ -9,6 +9,7 @@ so the state file holds exactly one account.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import asdict, dataclass, field
@@ -20,6 +21,18 @@ from .contract import SUPPORTED_CONTRACT_VERSION
 
 class PairingError(RuntimeError):
     """The server refused the token or the response is unusable."""
+
+
+def token_fingerprint(token: str) -> str:
+    """A non-reversible id of a pairing token — lets the state remember which
+    configured token it came from, so a *new* token in the config (another
+    agent, or a re-issued one) triggers a fresh pairing while the old
+    consumed token stays inert (measured defect 2026-09-03: a saved pairing
+    silently ignored the next agent's token)."""
+    token = (token or "").strip()
+    if not token:
+        return ""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass
@@ -59,6 +72,8 @@ class PairState:
     account_id: str = ""
     # The agent's owner — whose DM is the home channel (contract.HOME_CHANNEL_OWNER).
     owner_user_id: str = ""
+    # token_fingerprint() of the configured token this pairing came from.
+    pairing_fingerprint: str = ""
     extra: Dict[str, Any] = field(default_factory=dict)
 
     def to_json(self) -> Dict[str, Any]:
@@ -74,6 +89,7 @@ class PairState:
             "socket": asdict(self.socket),
             "serverOrigin": self.server_origin,
             "accountId": self.account_id,
+            "pairingFingerprint": self.pairing_fingerprint,
         }
 
     @staticmethod
@@ -106,6 +122,7 @@ class PairState:
             ),
             server_origin=str(data.get("serverOrigin") or ""),
             account_id=str(data.get("accountId") or ""),
+            pairing_fingerprint=str(data.get("pairingFingerprint") or ""),
         )
 
 
