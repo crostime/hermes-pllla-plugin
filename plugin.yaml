@@ -1,0 +1,26 @@
+name: pllla
+label: PLLLA
+kind: platform
+version: 0.1.0
+description: >
+  PLLLA bridge for Hermes Agent — pairs this Hermes profile with one PLLLA
+  agent account, receives that agent's conversations over the PLLLA task
+  lane, replies as the agent, and exposes the task's PLLLA app tools through
+  the two-tool discovery contract (pllla_tools_search / pllla_tools_call).
+  One profile = one PLLLA agent (docs/agent/EXTERNAL_RUNTIME.md §7).
+author: PLLLA
+provides_hooks:
+  - pre_llm_call
+provides_tools:
+  - pllla_tools_search
+  - pllla_tools_call
+requires_env: []
+optional_env:
+  - name: PLLLA_SERVER_ORIGIN
+    description: "PLLLA origin the agent lives on (default https://pllla.com)"
+    prompt: "PLLLA server origin"
+    password: false
+  - name: PLLLA_PAIRING_TOKEN
+    description: "One-time pair_live_… token from the agent's connect card (consumed on first gateway start)"
+    prompt: "PLLLA pairing token"
+    password: true

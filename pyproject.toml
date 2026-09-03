@@ -1,0 +1,10 @@
+[project]
+name = "hermes-pllla-plugin"
+version = "0.1.0"
+description = "PLLLA bridge plugin for Hermes Agent (platform adapter + tool discovery contract)"
+requires-python = ">=3.11"
+dependencies = ["python-socketio>=5.11,<6", "aiohttp>=3.9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
